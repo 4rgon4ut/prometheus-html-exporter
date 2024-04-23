@@ -12,6 +12,7 @@ type GlobalConfig struct {
 
 type ScrapeConfig struct {
 	Name                  string `yaml:",omitempty"`
+	Headless 			  bool
 	Address               string
 	Selector              string
 	DecimalPointSeparator string       `yaml:"decimal_point_separator"`

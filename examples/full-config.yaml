@@ -1,6 +1,7 @@
 scrape_config:
+  headless: true
   address: "https://gnosisscan.io/"
-  selector: "/html/body/div[1]/main/div/div[3]/div[1]/div/div/div/div[1]/div/div[1]/div[1]/div/div[2]/a"
+  selector: '/html/body/div[1]/main/div/div[3]/div[1]/div/div/div/div[1]/div/div[1]/div[1]/div/div[2]/a'
   decimal_point_separator: "."
   thousands_separator: ","
   metric:

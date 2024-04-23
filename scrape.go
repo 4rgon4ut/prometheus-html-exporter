@@ -1,20 +1,50 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/GusAntoniassi/prometheus-html-exporter/internal/pkg/types"
+	"github.com/PuerkitoBio/goquery"
 	"github.com/antchfx/htmlquery"
+	"github.com/chromedp/chromedp"
 	log "github.com/sirupsen/logrus"
 )
 
+/*
+import (
+	"gopkg.in/headzoo/surf.v1"
+	"fmt"
+)
+
+func main() {
+	bow := surf.NewBrowser()
+	err := bow.Open("http://golang.org")
+	if err != nil {
+		panic(err)
+	}
+
+	// Outputs: "The Go Programming Language"
+	fmt.Println(bow.Title())
+}
+
+*/
+
 func scrape(config types.ScrapeConfig) (float64, error) {
 	log.Debugf("requesting URL '%s'", config.Address)
-	body, err := doRequest(config.Address)
+	var body io.ReadCloser
+	var err error
+
+	if config.Headless {
+		body, err = doRequestHeadless(config.Address)
+	} else {
+		body, err = doRequest(config.Address)
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -33,6 +63,50 @@ func scrape(config types.ScrapeConfig) (float64, error) {
 
 	log.Debugf("scraped value '%0.2f' from URL '%s'", numberValue, config.Address)
 	return numberValue, nil
+}
+
+func doRequestHeadless(url string) (io.ReadCloser, error) {
+	// Create a new context
+	ctx, cancel := chromedp.NewContext(context.Background())
+	defer cancel()
+
+	// Run tasks
+	// Timeout for running tasks
+	ctx, cancel = context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	var htmlContent string
+
+	// Define the tasks to be run, here to navigate to the page and get the HTML
+	err := chromedp.Run(ctx,
+		chromedp.Navigate(url),
+		chromedp.Sleep(10*time.Second), // Wait for JavaScript to execute, adjust timing as necessary
+		chromedp.OuterHTML(`html`, &htmlContent, chromedp.ByQuery),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Load the HTML content into goquery
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
+	if err != nil {
+		log.Fatal("Error loading HTTP response body into goquery document.", err)
+	}
+
+	// Use goquery to find the element
+	selector := "#ContentPlaceHolder1_divBlocks > div > div"
+	doc.Find(selector).Each(func(index int, item *goquery.Selection) {
+		linkText := item.Text()
+		linkHref, exists := item.Attr("href")
+		if exists {
+			fmt.Printf("Link found: %s - %s\n", linkText, linkHref)
+		} else {
+			fmt.Printf("Link found: %s - No href attribute\n", linkText)
+		}
+	})
+	fmt.Println(htmlContent)
+	return nil, nil
+
 }
 
 func doRequest(url string) (io.ReadCloser, error) {
@@ -70,7 +144,7 @@ func doRequest(url string) (io.ReadCloser, error) {
     defer resp.Body.Close()
 
     if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-        return nil, fmt.Errorf("request error: %s", resp.Status)
+        return nil, fmt.Errorf("request error: %s reason: %s", resp.Status, resp.Body)
     }
 
     return resp.Body, nil
